@@ -1,0 +1,17 @@
+{
+  "name": "vibehack",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch server/index.mjs",
+    "start": "node server/index.mjs"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.13.7",
+    "better-sqlite3": "^11.7.0",
+    "hono": "^4.6.14",
+    "puppeteer": "^24.41.0",
+    "rss-parser": "^3.13.0"
+  }
+}

@@ -1,0 +1,9 @@
+node_modules/
+vibehack.db
+vibehack.db-journal
+vibehack.db-shm
+vibehack.db-wal
+.env
+.env.local
+dist/
+_design/
