@@ -3,77 +3,35 @@
  * ------------------------------------------------------------------ */
 
 const HACKS = [
-  { id:'h1', code:'LFH-044', name:'Latent Futures Hackathon', host:'Latent Labs + Groq', starts:'Apr 24', ends:'Apr 28', prize:'$48,000', tracks:['Agents','RAG','Voice'], status:'open', registered:true, teammates:3, progress:62, you:'In progress', due:'Apr 27 23:59 UTC' },
-  { id:'h2', code:'EDG-012', name:'Edge Model Jam', host:'Modal', starts:'Apr 26', ends:'Apr 29', prize:'$25,000 + credits', tracks:['On-device','Eval'], status:'open', registered:true, teammates:2, progress:18, you:'Scoping', due:'Apr 29 17:00 PT' },
-  { id:'h3', code:'ORB-007', name:'Orbit Build Weekend', host:'Orbit AI', starts:'May 02', ends:'May 04', prize:'$15,000', tracks:['Agents','Tools'], status:'upcoming', registered:true, teammates:1, progress:4, you:'Idea phase', due:'May 04 20:00 UTC' },
-  { id:'h4', code:'NMP-221', name:'Neural Mini-Prix', host:'Neurosphere', starts:'May 09', ends:'May 10', prize:'$8,000', tracks:['Speedrun','Eval'], status:'upcoming', registered:false, teammates:0, progress:0, you:'—', due:'—' },
-  { id:'h5', code:'BOB-033', name:'Build On Base', host:'Basecamp AI', starts:'May 15', ends:'May 22', prize:'$60,000', tracks:['Agents','Coding','RAG'], status:'upcoming', registered:false, teammates:0, progress:0, you:'—', due:'—' },
-  { id:'h6', code:'TRC-108', name:'Transcoder Throwdown', host:'Replicate', starts:'Apr 18', ends:'Apr 20', prize:'$12,000', tracks:['Video','Audio'], status:'closed', registered:true, teammates:2, progress:100, you:'Submitted', due:'Apr 20 23:59 UTC' },
-  { id:'h7', code:'PLN-061', name:'Planner Benchmarks Cup', host:'Evals.ai', starts:'Apr 11', ends:'Apr 14', prize:'$20,000', tracks:['Eval','Agents'], status:'closed', registered:true, teammates:4, progress:100, you:'Placed 7th', due:'Apr 14 23:59 UTC' },
+  { id:'h1', code:'LFH-044', name:'Latent Futures Hackathon', host:'Latent Labs + Groq', starts:'Apr 24', ends:'Apr 28', prize:'$48,000', tracks:['Agents','RAG','Voice'], status:'open', registered:true, registration_status:'registered', registration_url:'https://latent-labs.example/hackathon/register', registration_notes:'Team checked in.', registered_at:'2026-04-20T18:30:00.000Z', teammates:3, progress:62, you:'In progress', due:'Apr 27 23:59 UTC', source:'seed', source_url:'https://latent-labs.example/hackathons/latent-futures', source_key:'manual', source_url_key:'latent-labs.example/hackathons/latent-futures', website:'latent-labs.example', location:'Online', attendance_mode:'online', hidden:false, starts_at:'2026-04-24T00:00:00.000Z', ends_at:'2026-04-28T00:00:00.000Z', due_at:'2026-04-27T23:59:00.000Z' },
+  { id:'h2', code:'EDG-012', name:'Edge Model Jam', host:'Modal', starts:'Apr 26', ends:'Apr 29', prize:'$25,000', tracks:['On-device','Eval'], status:'open', registered:true, registration_status:'registered', registration_url:'https://modal.example/edge-model-jam', registration_notes:'Project linked from Submissions.', registered_at:'2026-04-23T15:15:00.000Z', teammates:2, progress:18, you:'Scoping', due:'Apr 29 17:00 PT', source:'seed', source_url:'https://modal.example/events/edge-model-jam', source_key:'manual', source_url_key:'modal.example/events/edge-model-jam', website:'modal.example', location:'Online', attendance_mode:'online', hidden:false, starts_at:'2026-04-26T00:00:00.000Z', ends_at:'2026-04-29T00:00:00.000Z', due_at:'2026-04-30T01:00:00.000Z' },
+  { id:'h3', code:'ORB-007', name:'Orbit Build Weekend', host:'Orbit AI', starts:'May 02', ends:'May 04', prize:'$15,000', tracks:['Agents','Tools'], status:'upcoming', registered:true, registration_status:'registered', registration_url:'https://orbit.example/build-weekend', registration_notes:'Solo entry.', registered_at:'2026-04-24T10:00:00.000Z', teammates:1, progress:4, you:'Idea phase', due:'May 04 20:00 UTC', source:'seed', source_url:'https://orbit.example/events/build-weekend', source_key:'manual', source_url_key:'orbit.example/events/build-weekend', website:'orbit.example', location:'Online', attendance_mode:'online', hidden:false, starts_at:'2026-05-02T00:00:00.000Z', ends_at:'2026-05-04T00:00:00.000Z', due_at:'2026-05-04T20:00:00.000Z' },
+  { id:'h4', code:'NMP-221', name:'Neural Mini-Prix', host:'Neurosphere', starts:'May 09', ends:'May 10', prize:'$8,000', tracks:['Speedrun','Eval'], status:'upcoming', registered:false, registration_status:'interested', registration_url:'https://neurosphere.example/mini-prix', registration_notes:'Waiting on team availability.', registered_at:null, teammates:0, progress:0, you:'—', due:'—', source:'seed', source_url:'https://neurosphere.example/events/neural-mini-prix', source_key:'manual', source_url_key:'neurosphere.example/events/neural-mini-prix', website:'neurosphere.example', location:'Online', attendance_mode:'online', hidden:false, starts_at:'2026-05-09T00:00:00.000Z', ends_at:'2026-05-10T00:00:00.000Z', due_at:null },
+  { id:'h5', code:'BOB-033', name:'Build On Base', host:'Basecamp AI', starts:'May 15', ends:'May 22', prize:'$60,000', tracks:['Agents','Coding','RAG'], status:'upcoming', registered:false, registration_status:'candidate', registration_url:'https://basecamp.example/build-on-base', registration_notes:'', registered_at:null, teammates:0, progress:0, you:'—', due:'—', source:'seed', source_url:'https://basecamp.example/hackathons/build-on-base', source_key:'manual', source_url_key:'basecamp.example/hackathons/build-on-base', website:'basecamp.example', location:'Online', attendance_mode:'online', hidden:false, starts_at:'2026-05-15T00:00:00.000Z', ends_at:'2026-05-22T00:00:00.000Z', due_at:null },
+  { id:'h6', code:'TRC-108', name:'Transcoder Throwdown', host:'Replicate', starts:'Apr 18', ends:'Apr 20', prize:'$12,000', tracks:['Video','Audio'], status:'closed', registered:true, registration_status:'submitted', registration_url:'https://replicate.example/transcoder-throwdown', registration_notes:'Submission complete.', registered_at:'2026-04-18T16:00:00.000Z', teammates:2, progress:100, you:'Submitted', due:'Apr 20 23:59 UTC', source:'seed', source_url:'https://replicate.example/hackathons/transcoder-throwdown', source_key:'manual', source_url_key:'replicate.example/hackathons/transcoder-throwdown', website:'replicate.example', location:'Online', attendance_mode:'online', hidden:false, starts_at:'2026-04-18T00:00:00.000Z', ends_at:'2026-04-20T00:00:00.000Z', due_at:'2026-04-20T23:59:00.000Z' },
+  { id:'h7', code:'PLN-061', name:'Planner Benchmarks Cup', host:'Evals.ai', starts:'Apr 11', ends:'Apr 14', prize:'$20,000', tracks:['Eval','Agents'], status:'closed', registered:true, registration_status:'submitted', registration_url:'https://evals.example/planner-cup', registration_notes:'Placed 7th.', registered_at:'2026-04-11T12:00:00.000Z', teammates:4, progress:100, you:'Placed 7th', due:'Apr 14 23:59 UTC', source:'seed', source_url:'https://evals.example/contests/planner-benchmarks-cup', source_key:'manual', source_url_key:'evals.example/contests/planner-benchmarks-cup', website:'evals.example', location:'Online', attendance_mode:'online', hidden:false, starts_at:'2026-04-11T00:00:00.000Z', ends_at:'2026-04-14T00:00:00.000Z', due_at:'2026-04-14T23:59:00.000Z' },
 ];
 
 const ENTRIES = [
-  { id:'e1', hack:'LFH-044', project:'gradient-scout', title:'Gradient Scout', tagline:'Multi-agent RAG over internal wikis.', team:['ila','m.lin','d.okon'], progress:62, stage:'Building', deadline:'Apr 27 23:59', risk:'med', tasks:[{t:'Eval harness', d:true},{t:'Voice wrapper', d:true},{t:'Submit video', d:false},{t:'Write tech memo', d:false}] },
-  { id:'e2', hack:'EDG-012', project:'bramble', title:'Bramble', tagline:'Phi-3 on-device planner w/ WebGPU.', team:['ila','k.vas'], progress:18, stage:'Scoping', deadline:'Apr 29 17:00', risk:'low', tasks:[{t:'Baseline bench', d:true},{t:'UX sketch', d:false},{t:'Quantize + ship', d:false}] },
-  { id:'e3', hack:'ORB-007', project:'candlewick', title:'Candlewick', tagline:'TBD — tool-calling puzzle solver.', team:['ila'], progress:4, stage:'Idea', deadline:'May 04 20:00', risk:'low', tasks:[{t:'Pick track', d:false},{t:'Sketch loop', d:false}] },
-  { id:'e4', hack:'TRC-108', project:'loop-jockey', title:'Loop Jockey', tagline:'Beat-matched transcoder for DJ sets.', team:['ila','r.pesh'], progress:100, stage:'Submitted', deadline:'Apr 20 23:59', risk:'done', tasks:[{t:'Submit', d:true}] },
+  { id:'e1', hack:'LFH-044', hack_id:'h1', contest_name:'Latent Futures Hackathon', contest_host:'Latent Labs + Groq', contest_url:'https://latent-labs.example/hackathons/latent-futures', contest_url_key:'latent-labs.example/hackathons/latent-futures', contest_deadline:'Apr 27 23:59 UTC', contest_deadline_at:'2026-04-27T23:59:00.000Z', contest_prize:'$48,000', repo_url:'https://github.com/example/gradient-scout', demo_url:'', notes:'Linked to contest record from fallback data.', project:'gradient-scout', title:'Gradient Scout', tagline:'Multi-agent RAG over internal wikis.', team:['ila','m.lin','d.okon'], progress:62, stage:'Building', deadline:'Apr 27 18:00 UTC', deadline_at:'2026-04-27T18:00:00.000Z', risk:'med', tasks:[{t:'Eval harness', d:true},{t:'Voice wrapper', d:true},{t:'Submit video', d:false},{t:'Write tech memo', d:false}] },
+  { id:'e2', hack:'EDG-012', hack_id:'h2', contest_name:'Edge Model Jam', contest_host:'Modal', contest_url:'https://modal.example/events/edge-model-jam', contest_url_key:'modal.example/events/edge-model-jam', contest_deadline:'Apr 29 17:00 PT', contest_deadline_at:'2026-04-30T01:00:00.000Z', contest_prize:'$25,000', repo_url:'', demo_url:'', notes:'Imported from linked contest.', project:'bramble', title:'Bramble', tagline:'Phi-3 on-device planner w/ WebGPU.', team:['ila','k.vas'], progress:18, stage:'Scoping', deadline:'Apr 29 12:00 PT', deadline_at:'2026-04-29T20:00:00.000Z', risk:'low', tasks:[{t:'Baseline bench', d:true},{t:'UX sketch', d:false},{t:'Quantize + ship', d:false}] },
+  { id:'e3', hack:'ORB-007', hack_id:'h3', contest_name:'Orbit Build Weekend', contest_host:'Orbit AI', contest_url:'https://orbit.example/events/build-weekend', contest_url_key:'orbit.example/events/build-weekend', contest_deadline:'May 04 20:00 UTC', contest_deadline_at:'2026-05-04T20:00:00.000Z', contest_prize:'$15,000', repo_url:'', demo_url:'', notes:'', project:'candlewick', title:'Candlewick', tagline:'TBD — tool-calling puzzle solver.', team:['ila'], progress:4, stage:'Idea', deadline:'May 04 16:00 UTC', deadline_at:'2026-05-04T16:00:00.000Z', risk:'low', tasks:[{t:'Pick track', d:false},{t:'Sketch loop', d:false}] },
+  { id:'e4', hack:'TRC-108', hack_id:'h6', contest_name:'Transcoder Throwdown', contest_host:'Replicate', contest_url:'https://replicate.example/hackathons/transcoder-throwdown', contest_url_key:'replicate.example/hackathons/transcoder-throwdown', contest_deadline:'Apr 20 23:59 UTC', contest_deadline_at:'2026-04-20T23:59:00.000Z', contest_prize:'$12,000', repo_url:'https://github.com/example/loop-jockey', demo_url:'https://loop-jockey.example/demo', notes:'Final submission sent.', project:'loop-jockey', title:'Loop Jockey', tagline:'Beat-matched transcoder for DJ sets.', team:['ila','r.pesh'], progress:100, stage:'Submitted', deadline:'Apr 20 20:00 UTC', deadline_at:'2026-04-20T20:00:00.000Z', risk:'done', tasks:[{t:'Submit', d:true}] },
 ];
 
-const CREDITS = [
-  { id:'c1', from:'Groq DevRel', fromTag:'LFH-044 sponsor', subject:'Extra 10M tokens for Latent Futures entrants', snippet:'Hackathon orgs cleared a 10M-token top-up — reply with team email to claim.', value:'$400', deadline:'48h', tags:['tokens','sponsor'], unread:true, when:'18m', action:'quick-apply', provider:'Groq' },
-  { id:'c2', from:'Modal', fromTag:'partner', subject:'$500 compute grant — on-device jam', snippet:'Automatically applied to teams accepted into the Edge Model Jam. Confirm billing email.', value:'$500', deadline:'7d', tags:['compute','grant'], unread:true, when:'1h', action:'confirm', provider:'Modal' },
-  { id:'c3', from:'Anthropic Build', fromTag:'startup program', subject:'Build program: $5k credits, rolling intake', snippet:'Eligibility: <$10M raised, <2yr old. Avg decision 4 days. You match 9/10 criteria.', value:'$5,000', deadline:'14d', tags:['credits','startup'], unread:false, when:'3h', action:'apply', provider:'Anthropic' },
-  { id:'c4', from:'Replicate', fromTag:'bounty', subject:'$250 bounty — open-source eval harness', snippet:'Ship a reusable eval harness for audio models. Payable on merge.', value:'$250', deadline:'21d', tags:['bounty','oss'], unread:false, when:'5h', action:'claim', provider:'Replicate' },
-  { id:'c5', from:'Lambda Cloud', fromTag:'referral', subject:'$100 GPU credit — referral from d.okon', snippet:'One-tap claim; credits applied to your next H100 run.', value:'$100', deadline:'30d', tags:['gpu','referral'], unread:false, when:'yesterday', action:'claim', provider:'Lambda' },
-  { id:'c6', from:'ElevenLabs', fromTag:'promo', subject:'2× character quota for hackathon teams', snippet:'Requires workspace ID + team size. Auto-detected from LFH-044 registration.', value:'2× quota', deadline:'10d', tags:['voice','quota'], unread:false, when:'yesterday', action:'apply', provider:'ElevenLabs' },
-  { id:'c7', from:'Fly.io', fromTag:'grant', subject:'$1,000 infra grant — weekend builders', snippet:'Manual review. Pitch 200 chars + github handle. 62% acceptance last cycle.', value:'$1,000', deadline:'5d', tags:['infra','grant'], unread:false, when:'2d', action:'apply', provider:'Fly.io' },
-  { id:'c8', from:'Pinecone', fromTag:'sponsor', subject:'Starter index bumped to 10M vectors', snippet:'Applied automatically for registered LFH-044 teams. No action required.', value:'auto', deadline:'—', tags:['vectors'], unread:false, when:'2d', action:'granted', provider:'Pinecone' },
-  { id:'c9', from:'Cerebras', fromTag:'live drop', subject:'CEREBRUS30 — 30% off inference for 72h', snippet:'Scraped from a founder livestream at 02:11 — 37 uses left of 100.', value:'30% off', deadline:'72h', tags:['live','promo'], unread:false, when:'3d', action:'copy', provider:'Cerebras' },
-];
-
-const CODES = [
-  { t:'00:23', code:'BUILDWEEK50', src:'Latent Labs — Friday Build Show', viewers:'3.4k', val:'50% off Pro / 30d', prov:'Latent', state:'new' },
-  { t:'02:11', code:'CEREBRUS30',  src:'Cerebras Launch Keynote',         viewers:'11.8k', val:'30% off inference / 72h', prov:'Cerebras', state:'new' },
-  { t:'07:44', code:'ORBIT-FREEMO',src:'Orbit AI — Town Hall',             viewers:'912',   val:'Free Pro month — 200 left', prov:'Orbit', state:'hot' },
-  { t:'12:02', code:'HACK25',      src:'Modal DevRel — weekly',            viewers:'1.1k',  val:'$25 compute credit', prov:'Modal', state:'used' },
-  { t:'14:31', code:'GROQZEROCOLD',src:'Groq — Llama-4 Q&A',               viewers:'6.2k',  val:'Free inference tier x2', prov:'Groq', state:'hot' },
-  { t:'19:08', code:'PIPER-LIVE',  src:'Piper TTS release stream',         viewers:'430',   val:'Beta access key', prov:'Piper', state:'expired' },
-  { t:'21:55', code:'SCOUT-APR',   src:'Scout AI monthly livestream',      viewers:'2.0k',  val:'$40 credit', prov:'Scout', state:'new' },
-  { t:'24:19', code:'HF-HACK-044', src:'HF Spaces — Hackathon Hour',       viewers:'4.8k',  val:'Free inference endpoint', prov:'Hugging Face', state:'new' },
-  { t:'28:02', code:'LAMBDA-GO',   src:'Lambda livestream',                viewers:'780',   val:'$100 GPU credit', prov:'Lambda', state:'new' },
-];
-
-const STREAMS_LIVE = [
-  { name:'Latent Labs — Friday Build Show', viewers:'3.4k', codes: 2, status:'live', kw:['promo','code','discount'] },
-  { name:'Cerebras Launch Keynote',          viewers:'11.8k', codes: 1, status:'live', kw:['cerebrus30'] },
-  { name:'Groq — Llama-4 Q&A',               viewers:'6.2k', codes: 1, status:'live', kw:['free tier'] },
-  { name:'Modal DevRel — weekly',            viewers:'1.1k', codes: 0, status:'live', kw:['credit'] },
-  { name:'HF Spaces — Hackathon Hour',       viewers:'4.8k', codes: 1, status:'live', kw:['hack','free'] },
-  { name:'Orbit AI — Town Hall',             viewers:'912',  codes: 1, status:'idle', kw:['freemo'] },
-];
-
-const NOTES = [
-  { id:'n1', ttl:'Gradient Scout — core loop', tag:'LFH-044', body:'plan → retrieve → critique → plan. Keep critic stateless. Use Groq for first 2 turns, Opus on fallback.\n\n- kill "rewrite query" step; adds 400ms for <3% win\n- demo idea: drop a 300-page PDF, ask "who owes who what"' },
-  { id:'n2', ttl:'Edge jam — scoping', tag:'EDG-012', body:'Phi-3-mini-4k works on-device at 8tok/s in Chrome WebGPU (M2).\n\nBuild: planner that runs fully offline. Differentiator: zero network calls, proof by airplane mode toggle during demo video.' },
-  { id:'n3', ttl:'Prize hunting notes', tag:'meta', body:'- EDG-012 has a sneaky "best UX" $2k not in the headline prize\n- ORB-007 judges: 2 founders + 1 VC — lean product, not research\n- HF monthly spaces has 30% slots for <48h entries; low volume' },
-  { id:'n4', ttl:'Candlewick — ideas', tag:'ORB-007', body:'puzzle genre ideas:\n- escape room w/ tool calls\n- nyt connections but adversarial\n- a file system the agent navigates blind\n\nlean: filesystem. novel, demos well.' },
-  { id:'n5', ttl:'Teammate bench', tag:'roster', body:'m.lin — eval infra, free weekends only\nd.okon — react/UI, deep in orbit until may 2\nk.vas — ios, wants smaller jam\nr.pesh — submitted loop-jockey w/, looking for next' },
-  { id:'n6', ttl:'Pitch template', tag:'submit', body:'90-sec video\n[0:00] problem, 1 sentence\n[0:08] the vibe (show don\'t tell)\n[0:25] 3 demo moments\n[1:20] stack + novelty claim\n[1:40] call to action / repo' },
+const SOURCES = [
+  { id:1, kind:'luma', url:'genai-collective', url_key:'genai-collective', label:'GenAI Collective', note:'default lu.ma watch', enabled:true, added_at:'2026-04-24T14:00:00.000Z', last_checked_at:null, last_success_at:null, last_error:'' },
+  { id:2, kind:'devpost', url:'https://devpost.com/hackathons', url_key:'devpost.com/hackathons', label:'Devpost AI', note:'default website watch', enabled:true, added_at:'2026-04-24T14:00:00.000Z', last_checked_at:null, last_success_at:null, last_error:'' },
+  { id:3, kind:'headless', url:'https://cerebralvalley.ai/hackathons', url_key:'cerebralvalley.ai/hackathons', label:'Cerebral Valley', note:'default website watch', enabled:true, added_at:'2026-04-24T14:00:00.000Z', last_checked_at:null, last_success_at:null, last_error:'' },
 ];
 
 const AGENT_LOG = [
-  { ts:'14:02:11', lv:'info', text:'scan.livestream twitch/latent-labs — 1 match: "grab the code BUILDWEEK50"' },
-  { ts:'14:02:12', lv:'ok',   text:'code captured: BUILDWEEK50 → 50% off Pro — added to Codes' },
-  { ts:'14:03:08', lv:'info', text:'scan.rss devpost — 2 new hackathons, queued for triage' },
-  { ts:'14:03:22', lv:'ok',   text:'credit.apply anthropic-build → draft ready, awaiting your approval' },
-  { ts:'14:04:40', lv:'warn', text:'scan.discord 6 servers — rate-limited by openrouter for 2 min' },
-  { ts:'14:05:01', lv:'info', text:'scan.youtube cerebras keynote — transcript lag 18s' },
-  { ts:'14:05:09', lv:'ok',   text:'code captured: CEREBRUS30 → 30% off inference (72h)' },
-  { ts:'14:06:33', lv:'info', text:'monitor.calendar — LFH-044 deadline in 11h, ORB-007 starts in 13d' },
-  { ts:'14:07:12', lv:'bad',  text:'scan.twitter auth expired — re-link in settings' },
-  { ts:'14:08:45', lv:'ok',   text:'credit.apply modal-edge-jam → confirmed, $500 posted to ledger' },
-  { ts:'14:09:14', lv:'info', text:'scan.slack 3 channels — no new credit mentions' },
-  { ts:'14:10:02', lv:'info', text:'digest.daily queued for 17:00 local' },
+  { ts:'14:02:11', lv:'info', text:'scan.luma genai-collective — 14 events seen, 2 hackish' },
+  { ts:'14:03:08', lv:'info', text:'scan.devpost — 2 new hackathons, queued for review' },
+  { ts:'14:04:40', lv:'warn', text:'scan.headless cerebralvalley — page rendered slowly, retry scheduled' },
+  { ts:'14:06:33', lv:'info', text:'calendar.generated — contest and submission dates refreshed' },
+  { ts:'14:08:45', lv:'ok',   text:'contest added to submissions: Edge Model Jam' },
+  { ts:'14:10:02', lv:'info', text:'scan.luma build-club — 9 events seen, none new' },
 ];
 
 /* calendar — Apr 2026 (Apr 1 is Wed). today = Apr 24 (Fri) */
@@ -82,7 +40,7 @@ const CAL_EVENTS = {
   20: [{kind:'due', label:'TRC-108 due'}],
   21: [{kind:'start', label:'PLN-061 start'}],
   24: [{kind:'start', label:'LFH-044 start'}],
-  26: [{kind:'start', label:'EDG-012 start'}, {kind:'live', label:'Cerebras keynote'}],
+  26: [{kind:'start', label:'EDG-012 start'}],
   27: [{kind:'due', label:'LFH-044 due'}],
   29: [{kind:'due', label:'EDG-012 due'}],
 };
@@ -99,17 +57,15 @@ window.__vh_bootstrap = async function () {
       return fallback;
     }
   };
-  const [h, e, cr, n, al, cal, sources] = await Promise.all([
+  const [h, e, al, cal, sources] = await Promise.all([
     tryFetch('/api/hacks',    HACKS),
     tryFetch('/api/entries',  ENTRIES),
-    tryFetch('/api/credits',  CREDITS),
-    tryFetch('/api/notes',    NOTES),
     tryFetch('/api/log',      AGENT_LOG),
     tryFetch('/api/calendar', { month: MONTH, events: CAL_EVENTS }),
-    tryFetch('/api/sources',  []),
+    tryFetch('/api/sources',  SOURCES),
   ]);
   Object.assign(window, {
-    HACKS: h, ENTRIES: e, CREDITS: cr, NOTES: n, AGENT_LOG: al,
+    HACKS: h, ENTRIES: e, AGENT_LOG: al,
     MONTH: (cal && cal.month) || MONTH,
     CAL_EVENTS: (cal && cal.events) || CAL_EVENTS,
     SOURCES: sources,

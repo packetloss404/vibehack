@@ -32,6 +32,68 @@ function domainFromUrl(value = '') {
   }
 }
 
+export function canonicalUrlKey(value = '') {
+  const text = String(value || '').trim();
+  if (!text) return '';
+  try {
+    const url = new URL(text.match(/^https?:\/\//i) ? text : `https://${text}`);
+    url.hash = '';
+    url.username = '';
+    url.password = '';
+    url.protocol = 'https:';
+    url.hostname = url.hostname.toLowerCase().replace(/^www\./, '');
+    url.pathname = url.pathname.replace(/\/+$/, '') || '/';
+    for (const key of [...url.searchParams.keys()]) {
+      if (/^(utm_|fbclid$|gclid$|mc_|igshid$|ref$)/i.test(key)) url.searchParams.delete(key);
+    }
+    url.searchParams.sort();
+    const search = url.searchParams.toString();
+    return `${url.hostname}${url.pathname === '/' ? '' : url.pathname}${search ? `?${search}` : ''}`;
+  } catch {
+    return text
+      .toLowerCase()
+      .replace(/^https?:\/\//, '')
+      .replace(/^www\./, '')
+      .replace(/[#?].*$/, '')
+      .replace(/\/+$/, '');
+  }
+}
+
+export function normalizeDeadlineAt(value = '', baseYear = new Date().getFullYear()) {
+  const text = String(value || '').trim();
+  if (!text || text === '—' || /\b(tba|tbd|to be announced)\b/i.test(text)) return '';
+
+  let working = text.replace(/(\d+)(st|nd|rd|th)\b/gi, '$1').replace(/,/g, ' ').replace(/\s+/g, ' ').trim();
+  if (/\s(?:-|–|—|to)\s/i.test(working)) {
+    const parts = working.split(/\s(?:-|–|—|to)\s/i).map((part) => part.trim()).filter(Boolean);
+    const first = parts[0] || '';
+    const last = parts[parts.length - 1] || working;
+    const firstMonth = first.match(/\b(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\b/i)?.[0];
+    const firstYear = first.match(/\b\d{4}\b/)?.[0];
+    working = /^\d{1,2}(?:\s|$)/.test(last) && firstMonth ? `${firstMonth} ${last}` : last;
+    if (!/\b\d{4}\b/.test(working) && firstYear) working = `${working} ${firstYear}`;
+  }
+
+  const tzMatch = working.match(/\b(UTC|PDT|PST|PT|EDT|EST|ET)\b/i);
+  const tz = tzMatch?.[1]?.toUpperCase() || '';
+  working = working.replace(/\b(UTC|PDT|PST|PT|EDT|EST|ET)\b/ig, '').replace(/\s+/g, ' ').trim();
+  const hasTime = /\b\d{1,2}:\d{2}\b/.test(working);
+  if (!/\b\d{4}\b/.test(working)) working = `${working} ${baseYear}`;
+  if (!hasTime) working = `${working} 23:59`;
+
+  const tzSuffix = {
+    UTC: 'UTC',
+    PDT: 'GMT-0700',
+    PST: 'GMT-0800',
+    PT: 'GMT-0800',
+    EDT: 'GMT-0400',
+    EST: 'GMT-0500',
+    ET: 'GMT-0500',
+  }[tz] || '';
+  const date = new Date(`${working}${tzSuffix ? ` ${tzSuffix}` : ''}`);
+  return Number.isNaN(date.getTime()) ? '' : date.toISOString();
+}
+
 db.exec(`
   CREATE TABLE IF NOT EXISTS hacks (
     id         TEXT PRIMARY KEY,
@@ -67,36 +129,6 @@ db.exec(`
     tasks    TEXT
   );
 
-  CREATE TABLE IF NOT EXISTS credits (
-    id         TEXT PRIMARY KEY,
-    "from"     TEXT,
-    from_tag   TEXT,
-    subject    TEXT,
-    snippet    TEXT,
-    value      TEXT,
-    value_usd  INTEGER DEFAULT 0,
-    deadline   TEXT,
-    deadline_ts INTEGER,
-    tags       TEXT,
-    unread     INTEGER DEFAULT 1,
-    when_str   TEXT,
-    action     TEXT,
-    provider   TEXT,
-    source     TEXT,
-    source_id  TEXT,
-    source_url TEXT,
-    discovered_at TEXT DEFAULT (datetime('now')),
-    UNIQUE(source, source_id)
-  );
-
-  CREATE TABLE IF NOT EXISTS notes (
-    id         TEXT PRIMARY KEY,
-    ttl        TEXT,
-    tag        TEXT,
-    body       TEXT,
-    updated_at TEXT DEFAULT (datetime('now'))
-  );
-
   CREATE TABLE IF NOT EXISTS agent_log (
     id    INTEGER PRIMARY KEY AUTOINCREMENT,
     ts    TEXT,
@@ -105,18 +137,6 @@ db.exec(`
     created_at TEXT DEFAULT (datetime('now'))
   );
   CREATE INDEX IF NOT EXISTS idx_agent_log_created_at ON agent_log(created_at DESC);
-
-  CREATE TABLE IF NOT EXISTS cal_events (
-    id     INTEGER PRIMARY KEY AUTOINCREMENT,
-    day    INTEGER,
-    kind   TEXT,
-    label  TEXT
-  );
-
-  CREATE TABLE IF NOT EXISTS meta (
-    k TEXT PRIMARY KEY,
-    v TEXT
-  );
 
   CREATE TABLE IF NOT EXISTS sources (
     id   INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -132,6 +152,14 @@ ensureColumn('hacks', 'attendance_mode', "TEXT DEFAULT 'unknown'");
 ensureColumn('hacks', 'website', "TEXT DEFAULT ''");
 ensureColumn('hacks', 'hidden', 'INTEGER DEFAULT 0');
 ensureColumn('hacks', 'source_key', "TEXT DEFAULT ''");
+ensureColumn('hacks', 'registration_status', "TEXT DEFAULT ''");
+ensureColumn('hacks', 'registration_url', "TEXT DEFAULT ''");
+ensureColumn('hacks', 'registration_notes', "TEXT DEFAULT ''");
+ensureColumn('hacks', 'registered_at', "TEXT DEFAULT ''");
+ensureColumn('hacks', 'source_url_key', "TEXT DEFAULT ''");
+ensureColumn('hacks', 'starts_at', "TEXT DEFAULT ''");
+ensureColumn('hacks', 'ends_at', "TEXT DEFAULT ''");
+ensureColumn('hacks', 'due_at', "TEXT DEFAULT ''");
 ensureColumn('entries', 'contest_name', "TEXT DEFAULT ''");
 ensureColumn('entries', 'contest_host', "TEXT DEFAULT ''");
 ensureColumn('entries', 'contest_url', "TEXT DEFAULT ''");
@@ -140,13 +168,34 @@ ensureColumn('entries', 'contest_prize', "TEXT DEFAULT ''");
 ensureColumn('entries', 'repo_url', "TEXT DEFAULT ''");
 ensureColumn('entries', 'demo_url', "TEXT DEFAULT ''");
 ensureColumn('entries', 'notes', "TEXT DEFAULT ''");
+ensureColumn('entries', 'hack_id', "TEXT DEFAULT ''");
+ensureColumn('entries', 'contest_url_key', "TEXT DEFAULT ''");
+ensureColumn('entries', 'deadline_at', "TEXT DEFAULT ''");
+ensureColumn('entries', 'contest_deadline_at', "TEXT DEFAULT ''");
 ensureColumn('sources', 'label', "TEXT DEFAULT ''");
 ensureColumn('sources', 'enabled', 'INTEGER DEFAULT 1');
-ensureColumn('sources', 'hidden', 'INTEGER DEFAULT 0');
+ensureColumn('sources', 'url_key', "TEXT DEFAULT ''");
+ensureColumn('sources', 'last_checked_at', "TEXT DEFAULT ''");
+ensureColumn('sources', 'last_run_at', "TEXT DEFAULT ''");
+ensureColumn('sources', 'last_success_at', "TEXT DEFAULT ''");
+ensureColumn('sources', 'last_error_at', "TEXT DEFAULT ''");
+ensureColumn('sources', 'last_error', "TEXT DEFAULT ''");
+ensureColumn('sources', 'consecutive_failures', 'INTEGER DEFAULT 0');
+ensureColumn('sources', 'last_seen_count', 'INTEGER DEFAULT 0');
+ensureColumn('sources', 'last_added_count', 'INTEGER DEFAULT 0');
+ensureColumn('sources', 'last_updated_count', 'INTEGER DEFAULT 0');
+ensureColumn('sources', 'last_duration_ms', 'INTEGER DEFAULT 0');
+
+db.exec(`
+  CREATE INDEX IF NOT EXISTS idx_hacks_source_url_key ON hacks(source_url_key);
+  CREATE INDEX IF NOT EXISTS idx_entries_hack_id ON entries(hack_id);
+  CREATE INDEX IF NOT EXISTS idx_entries_contest_url_key ON entries(contest_url_key);
+  CREATE INDEX IF NOT EXISTS idx_sources_url_key ON sources(url_key);
+`);
 
 const ensureDefaultSourceStmt = db.prepare(`
-  INSERT OR IGNORE INTO sources (kind, url, note, label, enabled, hidden)
-  VALUES (?, ?, ?, ?, 1, 0)
+  INSERT OR IGNORE INTO sources (kind, url, note, label, enabled)
+  VALUES (?, ?, ?, ?, 1)
 `);
 
 const defaultSources = [
@@ -160,6 +209,7 @@ const defaultSources = [
   ['luma', 'build-club', 'default lu.ma watch', 'Build Club'],
   ['luma', 'aitinkerers', 'default lu.ma watch', 'AI Tinkerers'],
   ['headless', 'https://cerebralvalley.ai/hackathons', 'default website watch', 'Cerebral Valley'],
+  ['headless', 'https://lablab.ai/event', 'default website watch', 'lablab.ai'],
   ['devpost', 'https://devpost.com/hackathons', 'default website watch', 'Devpost AI'],
 ];
 
@@ -182,21 +232,8 @@ if (firstRun && process.env.VH_NO_SEED !== '1') {
     for (const e of seed.ENTRIES) {
       insEntry.run({ ...e, team: JSON.stringify(e.team), tasks: JSON.stringify(e.tasks) });
     }
-    const insCred = db.prepare(`INSERT INTO credits (id,"from",from_tag,subject,snippet,value,deadline,tags,unread,when_str,action,provider,source)
-      VALUES (@id,@from,@fromTag,@subject,@snippet,@value,@deadline,@tags,@unread,@when,@action,@provider,'seed')`);
-    for (const c of seed.CREDITS) {
-      insCred.run({ ...c, tags: JSON.stringify(c.tags), unread: c.unread ? 1 : 0 });
-    }
-    const insNote = db.prepare(`INSERT INTO notes (id,ttl,tag,body) VALUES (@id,@ttl,@tag,@body)`);
-    for (const n of seed.NOTES) insNote.run(n);
     const insLog = db.prepare(`INSERT INTO agent_log (ts,lv,text) VALUES (@ts,@lv,@text)`);
     for (const l of seed.AGENT_LOG) insLog.run(l);
-    const insCal = db.prepare(`INSERT INTO cal_events (day,kind,label) VALUES (?,?,?)`);
-    for (const [day, evs] of Object.entries(seed.CAL_EVENTS)) {
-      for (const ev of evs) insCal.run(Number(day), ev.kind, ev.label);
-    }
-    db.prepare(`INSERT INTO meta (k,v) VALUES ('month', ?)`).run(JSON.stringify(seed.MONTH));
-    db.prepare(`INSERT INTO meta (k,v) VALUES ('seeded_at', datetime('now'))`).run();
   });
   tx();
   console.log('[db] seeded vibehack.db from seed.json');
@@ -204,9 +241,11 @@ if (firstRun && process.env.VH_NO_SEED !== '1') {
   console.log('[db] VH_NO_SEED=1 — starting with empty database');
 }
 
-const normalizeHackStmt = db.prepare('UPDATE hacks SET host=?, location=?, attendance_mode=?, website=?, hidden=?, source_key=? WHERE id=?');
+const normalizeHackStmt = db.prepare(`UPDATE hacks
+  SET host=?, location=?, attendance_mode=?, website=?, hidden=?, source_key=?, registration_status=?, source_url_key=?, starts_at=?, ends_at=?, due_at=?
+  WHERE id=?`);
 const normalizeHacks = db.transaction(() => {
-  const rows = db.prepare('SELECT id, host, tracks, source, source_url, location, attendance_mode, website, hidden, source_key FROM hacks').all();
+  const rows = db.prepare('SELECT id, host, tracks, source, source_url, location, attendance_mode, website, hidden, source_key, registered, registration_status, starts, ends, due FROM hacks').all();
   for (const row of rows) {
     let tracks = [];
     try { tracks = JSON.parse(row.tracks || '[]'); } catch {}
@@ -239,33 +278,127 @@ const normalizeHacks = db.transaction(() => {
       attendanceMode = location ? 'in_person' : attendanceMode;
     }
 
+    if (row.source === 'lablab') {
+      host ||= 'lablab.ai';
+      website ||= 'lablab.ai';
+      sourceKey ||= 'https://lablab.ai/event';
+    }
+
     if (!website && row.source_url) website = domainFromUrl(row.source_url);
-    normalizeHackStmt.run(host, location, attendanceMode, website, hidden ? 1 : 0, sourceKey, row.id);
+    const registrationStatus = !row.registration_status || row.registration_status === 'unregistered' ? (row.registered ? 'registered' : 'candidate') : row.registration_status;
+    normalizeHackStmt.run(
+      host,
+      location,
+      attendanceMode,
+      website,
+      hidden ? 1 : 0,
+      sourceKey,
+      registrationStatus,
+      canonicalUrlKey(row.source_url || website),
+      normalizeDeadlineAt(row.starts),
+      normalizeDeadlineAt(row.ends),
+      normalizeDeadlineAt(row.due || row.ends),
+      row.id,
+    );
   }
+});
+
+const backfillEntryLinks = db.transaction(() => {
+  const hacksByCode = new Map(db.prepare('SELECT id, code, source_url_key FROM hacks').all().map((row) => [row.code, row]));
+  const hacksByUrlKey = new Map(db.prepare("SELECT id, source_url_key FROM hacks WHERE source_url_key!=''").all().map((row) => [row.source_url_key, row]));
+  const updateEntry = db.prepare('UPDATE entries SET hack_id=?, contest_url_key=?, deadline_at=?, contest_deadline_at=? WHERE id=?');
+  const rows = db.prepare('SELECT id, hack, contest_url, deadline, contest_deadline, hack_id FROM entries').all();
+  for (const row of rows) {
+    const contestUrlKey = canonicalUrlKey(row.contest_url);
+    const linkedHack = hacksByCode.get(row.hack) || hacksByUrlKey.get(contestUrlKey) || null;
+    updateEntry.run(
+      row.hack_id || linkedHack?.id || '',
+      contestUrlKey,
+      normalizeDeadlineAt(row.deadline),
+      normalizeDeadlineAt(row.contest_deadline),
+      row.id,
+    );
+  }
+});
+
+const backfillSourceKeys = db.transaction(() => {
+  const updateSource = db.prepare('UPDATE sources SET url_key=? WHERE id=?');
+  const rows = db.prepare('SELECT id, url FROM sources').all();
+  for (const row of rows) updateSource.run(canonicalUrlKey(row.url), row.id);
 });
 
 try {
   normalizeHacks();
+  backfillEntryLinks();
+  backfillSourceKeys();
 } catch (e) {
-  console.warn('[db] hack normalization skipped:', e.message);
+  console.warn('[db] normalization skipped:', e.message);
 }
 
 const hydrateHack = (r) => r && ({ ...r, tracks: JSON.parse(r.tracks || '[]'), registered: !!r.registered, hidden: !!r.hidden });
 const hydrateEntry = (r) => r && ({ ...r, team: JSON.parse(r.team || '[]'), tasks: JSON.parse(r.tasks || '[]') });
-const hydrateCredit = (r) => r && ({ ...r, tags: JSON.parse(r.tags || '[]'), unread: !!r.unread, when: r.when_str, sourceUrl: r.source_url, valueUsd: r.value_usd });
+
+function findHackLink({ hack = '', contestUrl = '' } = {}) {
+  const contestUrlKey = canonicalUrlKey(contestUrl);
+  const row = db.prepare(`SELECT id FROM hacks
+    WHERE code=? OR id=? OR (source_url_key!='' AND source_url_key=?)
+    ORDER BY CASE WHEN code=? THEN 0 WHEN id=? THEN 1 ELSE 2 END, rowid
+    LIMIT 1`).get(hack || '', hack || '', contestUrlKey, hack || '', hack || '');
+  return { hackId: row?.id || '', contestUrlKey };
+}
+
+function parseCalendarDate(value, year) {
+  const text = String(value || '').trim();
+  if (!text || text === '—' || /\btba\b|to be announced/i.test(text)) return null;
+  const normalized = /\b\d{4}\b/.test(text) ? text : `${text} ${year}`;
+  const date = new Date(normalized);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function addCalendarEvent(events, value, kind, label, year, month) {
+  const date = parseCalendarDate(value, year);
+  if (!date || date.getFullYear() !== year || date.getMonth() !== month) return;
+  const day = date.getDate();
+  (events[day] ||= []).push({ kind, label });
+}
 
 export const queries = {
   allHacks:   () => db.prepare('SELECT * FROM hacks ORDER BY rowid').all().map(hydrateHack),
   allEntries: () => db.prepare('SELECT * FROM entries ORDER BY rowid').all().map(hydrateEntry),
-  findHackByUrl: (url) => hydrateHack(db.prepare('SELECT * FROM hacks WHERE source_url=? OR source_key=? LIMIT 1').get(url, url)),
-  allCredits: () => db.prepare('SELECT * FROM credits ORDER BY rowid').all().map(hydrateCredit),
-  allNotes:   () => db.prepare('SELECT * FROM notes ORDER BY rowid').all(),
+  findHackByUrl: (url) => hydrateHack(db.prepare('SELECT * FROM hacks WHERE source_url=? OR source_key=? OR source_url_key=? LIMIT 1').get(url, url, canonicalUrlKey(url))),
+  findActiveDuplicateEntries: ({ hackId = '', contestUrl = '', contestUrlKey = '', excludeId = '' } = {}) => {
+    const key = contestUrlKey || canonicalUrlKey(contestUrl);
+    if (!hackId && !key) return [];
+    return db.prepare(`SELECT * FROM entries
+      WHERE id!=?
+        AND COALESCE(stage,'')!='Submitted'
+         AND ((?!='' AND hack_id=?) OR (?!='' AND contest_url_key=?))
+      ORDER BY rowid`).all(excludeId, hackId, hackId, key, key).map(hydrateEntry);
+  },
   recentLog:  (limit = 200) => db.prepare('SELECT id,ts,lv,text FROM agent_log ORDER BY id DESC LIMIT ?').all(limit).reverse(),
   calendar:   () => {
-    const month = JSON.parse(db.prepare(`SELECT v FROM meta WHERE k='month'`).get()?.v || 'null');
-    const rows  = db.prepare('SELECT day,kind,label FROM cal_events').all();
+    const now = new Date();
+    const year = now.getFullYear();
+    const monthIndex = now.getMonth();
+    const first = new Date(year, monthIndex, 1);
+    const month = {
+      name: first.toLocaleString('en-US', { month: 'long', year: 'numeric' }),
+      dayOffset: first.getDay(),
+      days: new Date(year, monthIndex + 1, 0).getDate(),
+      today: now.getDate(),
+    };
     const events = {};
-    for (const r of rows) (events[r.day] ||= []).push({ kind: r.kind, label: r.label });
+    const hacks = db.prepare("SELECT code,name,starts,ends,due FROM hacks WHERE hidden=0 ORDER BY rowid").all();
+    for (const hack of hacks) {
+      const label = hack.code || hack.name;
+      addCalendarEvent(events, hack.starts, 'start', `${label} start`, year, monthIndex);
+      addCalendarEvent(events, hack.due && hack.due !== '—' ? hack.due : hack.ends, 'due', `${label} due`, year, monthIndex);
+    }
+    const entries = db.prepare("SELECT title,deadline,contest_deadline FROM entries WHERE stage!='Submitted' ORDER BY rowid").all();
+    for (const entry of entries) {
+      addCalendarEvent(events, entry.deadline, 'due', `${entry.title} build due`, year, monthIndex);
+      addCalendarEvent(events, entry.contest_deadline, 'due', `${entry.title} contest due`, year, monthIndex);
+    }
     return { month, events };
   },
 
@@ -273,8 +406,9 @@ export const queries = {
     const row = db.prepare('SELECT registered FROM hacks WHERE id=?').get(id);
     if (!row) return null;
     const next = row.registered ? 0 : 1;
-    db.prepare('UPDATE hacks SET registered=? WHERE id=?').run(next, id);
-    return { id, registered: !!next };
+    db.prepare('UPDATE hacks SET registered=?, registration_status=?, registered_at=? WHERE id=?')
+      .run(next, next ? 'registered' : 'candidate', next ? new Date().toISOString() : '', id);
+    return { id, registered: !!next, registration_status: next ? 'registered' : 'candidate' };
   },
   createHack: ({
     name,
@@ -288,13 +422,21 @@ export const queries = {
     website = '',
     location = '',
     attendanceMode = 'unknown',
+    status = 'upcoming',
+    due = '—',
+    hidden = false,
+    registrationStatus = '',
+    registrationUrl = '',
+    registrationNotes = '',
+    registeredAt = '',
   }) => {
     const slug = (name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
     const id = 'h_' + slug + '_' + Date.now().toString(36);
     const initials = name.split(/\s+/).map(w => w[0]).filter(Boolean).join('').toUpperCase().slice(0, 3) || 'EV';
     const code = `CUSTOM-${initials}-${String(Math.floor(Math.random()*900)+100)}`;
-    db.prepare(`INSERT INTO hacks (id,code,name,host,starts,ends,prize,tracks,status,registered,teammates,progress,you,due,source,source_url,website,location,attendance_mode,hidden,source_key)
-      VALUES (?,?,?,?,?,?,?,?,'upcoming',?,0,0,'—','—','custom',?,?,?,?,0,'manual')`)
+    const sourceUrlKey = canonicalUrlKey(sourceUrl || website);
+    db.prepare(`INSERT INTO hacks (id,code,name,host,starts,ends,prize,tracks,status,registered,teammates,progress,you,due,source,source_url,website,location,attendance_mode,hidden,source_key,registration_status,registration_url,registration_notes,registered_at,source_url_key,starts_at,ends_at,due_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,0,0,'—',?,'custom',?,?,?,?,?,'manual',?,?,?,?,?,?,?,?)`)
       .run(
         id,
         code,
@@ -304,13 +446,24 @@ export const queries = {
         ends,
         prize,
         JSON.stringify(tracks),
+        status,
         registered ? 1 : 0,
+        due,
         sourceUrl,
         website || domainFromUrl(sourceUrl),
         location,
         attendanceMode,
+        hidden ? 1 : 0,
+        registrationStatus || (registered ? 'registered' : 'candidate'),
+        registrationUrl,
+        registrationNotes,
+        registeredAt || (registered ? new Date().toISOString() : ''),
+        sourceUrlKey,
+        normalizeDeadlineAt(starts),
+        normalizeDeadlineAt(ends),
+        normalizeDeadlineAt(due || ends),
       );
-    return { id, code, name };
+    return hydrateHack(db.prepare('SELECT * FROM hacks WHERE id=?').get(id));
   },
   updateHack: (id, patch) => {
     const existing = db.prepare('SELECT * FROM hacks WHERE id=?').get(id);
@@ -321,9 +474,13 @@ export const queries = {
       ...patch,
       source_url: patch.sourceUrl ?? patch.source_url ?? existing.source_url,
       attendance_mode: patch.attendanceMode ?? patch.attendance_mode ?? existing.attendance_mode,
+      registration_status: patch.registrationStatus ?? patch.registration_status ?? existing.registration_status,
+      registration_url: patch.registrationUrl ?? patch.registration_url ?? existing.registration_url,
+      registration_notes: patch.registrationNotes ?? patch.registration_notes ?? existing.registration_notes,
+      registered_at: patch.registeredAt ?? patch.registered_at ?? existing.registered_at,
     };
     db.prepare(`UPDATE hacks
-      SET name=?, host=?, starts=?, ends=?, prize=?, tracks=?, status=?, registered=?, you=?, due=?, source_url=?, website=?, location=?, attendance_mode=?, hidden=?
+      SET name=?, host=?, starts=?, ends=?, prize=?, tracks=?, status=?, registered=?, you=?, due=?, source_url=?, website=?, location=?, attendance_mode=?, hidden=?, registration_status=?, registration_url=?, registration_notes=?, registered_at=?, source_url_key=?, starts_at=?, ends_at=?, due_at=?
       WHERE id=?`)
       .run(
         next.name,
@@ -341,6 +498,14 @@ export const queries = {
         next.location || '',
         next.attendance_mode || 'unknown',
         next.hidden ? 1 : 0,
+        next.registration_status === 'unregistered' ? 'candidate' : (next.registration_status || (next.registered ? 'registered' : 'candidate')),
+        next.registration_url || '',
+        next.registration_notes || '',
+        next.registered_at || '',
+        canonicalUrlKey(next.source_url || next.website),
+        normalizeDeadlineAt(next.starts),
+        normalizeDeadlineAt(next.ends),
+        normalizeDeadlineAt(next.due || next.ends),
         id,
       );
     return hydrateHack(db.prepare('SELECT * FROM hacks WHERE id=?').get(id));
@@ -354,44 +519,6 @@ export const queries = {
     if (!allowed.has(field)) throw new Error('invalid match field');
     const info = db.prepare(`UPDATE hacks SET hidden=? WHERE ${field}=?`).run(hidden ? 1 : 0, value);
     return { field, value, hidden: !!hidden, changed: info.changes };
-  },
-  applyCredit: (id, action = 'applied') => {
-    const row = db.prepare('SELECT id,action FROM credits WHERE id=?').get(id);
-    if (!row) return null;
-    const nextAction =
-      action === 'confirm'     ? 'granted' :
-      action === 'quick-apply' ? 'applied' :
-      action === 'apply'       ? 'applied' :
-      action === 'claim'       ? 'granted' :
-      action === 'copy'        ? 'copied'  :
-      action;
-    db.prepare('UPDATE credits SET action=?, unread=0 WHERE id=?').run(nextAction, id);
-    return { id, action: nextAction };
-  },
-  readCredit: (id) => {
-    db.prepare('UPDATE credits SET unread=0 WHERE id=?').run(id);
-    return { id, unread: false };
-  },
-  archiveCredit: (id) => {
-    db.prepare("UPDATE credits SET action='archived', unread=0 WHERE id=?").run(id);
-    return { id, action: 'archived' };
-  },
-  createNote: ({ ttl, tag = '', body = '' }) => {
-    const id = 'n_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-    db.prepare('INSERT INTO notes (id,ttl,tag,body) VALUES (?,?,?,?)').run(id, ttl || 'Untitled', tag, body);
-    return { id, ttl: ttl || 'Untitled', tag, body };
-  },
-  updateNote: (id, patch) => {
-    const existing = db.prepare('SELECT * FROM notes WHERE id=?').get(id);
-    if (!existing) return null;
-    const next = { ...existing, ...patch };
-    db.prepare("UPDATE notes SET ttl=?, tag=?, body=?, updated_at=datetime('now') WHERE id=?")
-      .run(next.ttl, next.tag, next.body, id);
-    return next;
-  },
-  deleteNote: (id) => {
-    db.prepare('DELETE FROM notes WHERE id=?').run(id);
-    return { id, deleted: true };
   },
   createEntry: ({
     hack,
@@ -414,8 +541,9 @@ export const queries = {
     tasks = [],
   }) => {
     const id = 'e_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-    db.prepare(`INSERT INTO entries (id,hack,project,title,tagline,team,progress,stage,deadline,risk,tasks,contest_name,contest_host,contest_url,contest_deadline,contest_prize,repo_url,demo_url,notes)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+    const { hackId, contestUrlKey } = findHackLink({ hack, contestUrl });
+    db.prepare(`INSERT INTO entries (id,hack,project,title,tagline,team,progress,stage,deadline,risk,tasks,contest_name,contest_host,contest_url,contest_deadline,contest_prize,repo_url,demo_url,notes,hack_id,contest_url_key,deadline_at,contest_deadline_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
       .run(
         id,
         hack || '',
@@ -436,6 +564,10 @@ export const queries = {
         repoUrl,
         demoUrl,
         notes,
+        hackId,
+        contestUrlKey,
+        normalizeDeadlineAt(deadline),
+        normalizeDeadlineAt(contestDeadline),
       );
     return hydrateEntry(db.prepare('SELECT * FROM entries WHERE id=?').get(id));
   },
@@ -454,9 +586,13 @@ export const queries = {
       contest_prize: patch.contestPrize ?? patch.contest_prize ?? existing.contest_prize,
       repo_url: patch.repoUrl ?? patch.repo_url ?? existing.repo_url,
       demo_url: patch.demoUrl ?? patch.demo_url ?? existing.demo_url,
+      hack_id: patch.hackId ?? patch.hack_id ?? existing.hack_id,
+      contest_url_key: patch.contestUrlKey ?? patch.contest_url_key ?? existing.contest_url_key,
     };
+    const link = findHackLink({ hack: next.hack, contestUrl: next.contest_url });
+    const explicitHackId = patch.hackId ?? patch.hack_id;
     db.prepare(`UPDATE entries
-      SET hack=?, project=?, title=?, tagline=?, team=?, progress=?, stage=?, deadline=?, risk=?, tasks=?, contest_name=?, contest_host=?, contest_url=?, contest_deadline=?, contest_prize=?, repo_url=?, demo_url=?, notes=?
+      SET hack=?, project=?, title=?, tagline=?, team=?, progress=?, stage=?, deadline=?, risk=?, tasks=?, contest_name=?, contest_host=?, contest_url=?, contest_deadline=?, contest_prize=?, repo_url=?, demo_url=?, notes=?, hack_id=?, contest_url_key=?, deadline_at=?, contest_deadline_at=?
       WHERE id=?`)
       .run(
         next.hack || '',
@@ -477,6 +613,10 @@ export const queries = {
         next.repo_url || '',
         next.demo_url || '',
         next.notes || '',
+        (explicitHackId ?? link.hackId) || next.hack_id || '',
+        link.contestUrlKey,
+        normalizeDeadlineAt(next.deadline),
+        normalizeDeadlineAt(next.contest_deadline),
         id,
       );
     return hydrateEntry(db.prepare('SELECT * FROM entries WHERE id=?').get(id));
@@ -501,18 +641,19 @@ export const queries = {
     return { id: info.lastInsertRowid, ts: now, lv: lv || 'info', text };
   },
 
-  allSources: () => db.prepare('SELECT * FROM sources ORDER BY hidden ASC, enabled DESC, id DESC').all().map((row) => ({ ...row, enabled: !!row.enabled, hidden: !!row.hidden })),
-  addSource: ({ kind = 'luma', url, note = '', label = '', enabled = true, hidden = false }) => {
-    const info = db.prepare('INSERT OR IGNORE INTO sources (kind,url,note,label,enabled,hidden) VALUES (?,?,?,?,?,?)').run(kind, url, note, label, enabled ? 1 : 0, hidden ? 1 : 0);
-    return { id: info.lastInsertRowid, kind, url, note, label, enabled, hidden, existed: info.changes === 0 };
+  allSources: () => db.prepare('SELECT * FROM sources ORDER BY enabled DESC, id DESC').all().map((row) => ({ ...row, enabled: !!row.enabled })),
+  addSource: ({ kind = 'luma', url, note = '', label = '', enabled = true }) => {
+    const info = db.prepare('INSERT OR IGNORE INTO sources (kind,url,note,label,enabled,url_key) VALUES (?,?,?,?,?,?)')
+      .run(kind, url, note, label, enabled ? 1 : 0, canonicalUrlKey(url));
+    return { id: info.lastInsertRowid, kind, url, note, label, enabled, existed: info.changes === 0 };
   },
   updateSource: (id, patch) => {
     const existing = db.prepare('SELECT * FROM sources WHERE id=?').get(id);
     if (!existing) return null;
     const next = { ...existing, ...patch };
-    db.prepare('UPDATE sources SET kind=?, url=?, note=?, label=?, enabled=?, hidden=? WHERE id=?')
-      .run(next.kind, next.url, next.note || '', next.label || '', next.enabled ? 1 : 0, next.hidden ? 1 : 0, id);
-    return { ...next, enabled: !!next.enabled, hidden: !!next.hidden };
+    db.prepare('UPDATE sources SET kind=?, url=?, note=?, label=?, enabled=?, url_key=? WHERE id=?')
+      .run(next.kind, next.url, next.note || '', next.label || '', next.enabled ? 1 : 0, canonicalUrlKey(next.url), id);
+    return { ...next, enabled: !!next.enabled };
   },
   deleteSource: (id) => {
     db.prepare('DELETE FROM sources WHERE id=?').run(id);

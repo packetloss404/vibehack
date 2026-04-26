@@ -1,34 +1,19 @@
 import * as luma from './luma.mjs';
 import * as headless from './headless.mjs';
 import * as devpost from './devpost.mjs';
-import * as providers from './providers.mjs';
-import * as aggregators from './aggregators.mjs';
-import * as signups from './signups.mjs';
-import * as promos from './promos.mjs';
-import * as gmail from './gmail.mjs';
 
-export const workers = { luma, headless, devpost, providers, aggregators, signups, promos, gmail };
+export const workers = { luma, headless, devpost };
 
 const publicAgents = {
   vibe_events: {
     name: 'vibe_events',
-    label: 'Vibe Coding Events search',
+    label: 'Vibe Coding Events',
     members: ['luma', 'headless'],
   },
   hackathons: {
     name: 'hackathons',
-    label: 'Hackathon events',
+    label: 'Hackathon Events',
     members: ['devpost'],
-  },
-  credit_hunter: {
-    name: 'credit_hunter',
-    label: 'Credit hunter duties',
-    members: ['providers', 'aggregators', 'signups', 'gmail'],
-  },
-  promos: {
-    name: 'promos',
-    label: 'Promos search',
-    members: ['promos'],
   },
 };
 

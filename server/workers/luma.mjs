@@ -8,9 +8,8 @@
  *   - process.env.LUMA_CALENDARS  (comma-separated slugs)
  *   - DB rows in `sources` where kind='luma' and url contains the slug
  */
-import { db } from '../db.mjs';
+import { canonicalUrlKey, db, normalizeDeadlineAt } from '../db.mjs';
 import { log } from '../bus.mjs';
-import { extractCreditSignals, flattenProseMirror } from './_credit_parse.mjs';
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
 
@@ -97,12 +96,67 @@ const SOFT_EXCLUDE_PATTERNS = [
 ];
 
 const insStmt = db.prepare(`INSERT OR IGNORE INTO hacks
-  (id,code,name,host,starts,ends,prize,tracks,status,registered,teammates,progress,you,due,source,source_url,location,attendance_mode,website,hidden,source_key)
-  VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+  (id,code,name,host,starts,ends,prize,tracks,status,registered,teammates,progress,you,due,source,source_url,location,attendance_mode,website,hidden,source_key,source_url_key,starts_at,ends_at,due_at)
+  VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
 
-const insCreditStmt = db.prepare(`INSERT OR IGNORE INTO credits
-  (id,"from",from_tag,subject,snippet,value,value_usd,deadline,deadline_ts,tags,unread,when_str,action,provider,source,source_id,source_url)
-  VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+const SOURCE_HEALTH_COLUMNS = [
+  ['last_run_at', "TEXT DEFAULT ''"],
+  ['last_error_at', "TEXT DEFAULT ''"],
+  ['consecutive_failures', 'INTEGER DEFAULT 0'],
+  ['last_seen_count', 'INTEGER DEFAULT 0'],
+  ['last_added_count', 'INTEGER DEFAULT 0'],
+  ['last_updated_count', 'INTEGER DEFAULT 0'],
+  ['last_duration_ms', 'INTEGER DEFAULT 0'],
+];
+
+function ensureSourceHealthColumns() {
+  try {
+    const existing = new Set(db.prepare('PRAGMA table_info(sources)').all().map((row) => row.name));
+    for (const [name, definition] of SOURCE_HEALTH_COLUMNS) {
+      if (!existing.has(name)) db.exec(`ALTER TABLE sources ADD COLUMN ${name} ${definition}`);
+    }
+  } catch (e) {
+    log('bad', `scan.luma health schema skipped: ${e.message}`);
+  }
+}
+
+ensureSourceHealthColumns();
+
+function sourceColumns() {
+  try { return new Set(db.prepare('PRAGMA table_info(sources)').all().map((row) => row.name)); }
+  catch { return new Set(); }
+}
+
+function updateSourceHealth({ url, ok, error = '', seen = 0, added = 0, updated = 0, durationMs = 0 }) {
+  const columns = sourceColumns();
+  const now = new Date().toISOString();
+  const sets = [];
+  const values = [];
+  const put = (column, value) => {
+    if (columns.has(column)) {
+      sets.push(`${column}=?`);
+      values.push(value);
+    }
+  };
+  put('last_checked_at', now);
+  put('last_run_at', now);
+  put('last_seen_count', seen);
+  put('last_added_count', added);
+  put('last_updated_count', updated);
+  put('last_duration_ms', durationMs);
+  if (ok) {
+    put('last_success_at', now);
+    put('last_error', '');
+    put('consecutive_failures', 0);
+  } else {
+    put('last_error_at', now);
+    put('last_error', String(error || '').slice(0, 500));
+    if (columns.has('consecutive_failures')) sets.push('consecutive_failures=COALESCE(consecutive_failures,0)+1');
+  }
+  if (sets.length === 0) return;
+  values.push('luma', url);
+  db.prepare(`UPDATE sources SET ${sets.join(', ')} WHERE kind=? AND url=?`).run(...values);
+}
 
 function fmtDay(iso) {
   const d = new Date(iso);
@@ -214,6 +268,7 @@ function insertEvent({ ev, calendarSlug, host }) {
     calendarSlug || '',
   ].filter(Boolean));
   const url = `https://lu.ma/${ev.url || ev.api_id.replace(/^evt-/, '')}`;
+  const urlKey = canonicalUrlKey(url);
   const location = extractLocation(ev);
   const attendanceMode = extractAttendanceMode(ev, location);
   const hidden = shouldHideForAttendance(attendanceMode, classification);
@@ -222,43 +277,10 @@ function insertEvent({ ev, calendarSlug, host }) {
     fmtDay(ev.start_at), fmtDay(ev.end_at), '—',
     tracks, 'upcoming', 0, 0, 0, '—',
     ev.end_at ? new Date(ev.end_at).toUTCString() : '—',
-    'luma', url, location, attendanceMode, 'lu.ma', hidden ? 1 : 0, calendarSlug || ''
+    'luma', url, location, attendanceMode, 'lu.ma', hidden ? 1 : 0, calendarSlug || '', urlKey,
+    normalizeDeadlineAt(ev.start_at), normalizeDeadlineAt(ev.end_at), normalizeDeadlineAt(ev.end_at)
   );
   return { inserted: info.changes > 0, isHackish: true };
-}
-
-/** Fetch event detail and extract credit signals from the description into the credits table. */
-async function enrichEventCredits(ev) {
-  try {
-    const slug = ev.url || ev.api_id.replace(/^evt-/, '');
-    const r = await fetch(`https://api.lu.ma/url?url=${encodeURIComponent(slug)}`, {
-      headers: { 'User-Agent': UA, 'Accept': 'application/json' },
-    });
-    if (!r.ok) return 0;
-    const j = await r.json();
-    const desc = flattenProseMirror(j.data?.description_mirror) || j.data?.event?.description || '';
-    if (!desc) return 0;
-    const signals = extractCreditSignals(desc);
-    const eventUrl = `https://lu.ma/${slug}`;
-    const eventName = j.data?.event?.name || ev.name || 'Lu.ma event';
-    let added = 0;
-    const deadlineTs = ev.end_at ? Math.floor(new Date(ev.end_at).getTime() / 1000) : 0;
-    for (const sig of signals) {
-      const id = `luma_cr_${ev.api_id.replace(/^evt-/, '')}_${sig.provider.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 10)}_${sig.valueUsd}`;
-      const subject = `${sig.provider} — ${sig.value}`;
-      const snippet = `${eventName}: ${sig.raw}`;
-      const info = insCreditStmt.run(
-        id, eventName, 'hackathon sponsor', subject, snippet,
-        sig.value, sig.valueUsd, fmtDay(ev.end_at) || '—', deadlineTs,
-        JSON.stringify(['hackathon', 'luma', sig.provider.toLowerCase()]),
-        1, 'now', 'apply', sig.provider, 'luma', `${ev.api_id}|${sig.provider}|${sig.valueUsd}`, eventUrl
-      );
-      if (info.changes) added++;
-    }
-    return added;
-  } catch (e) {
-    return 0;
-  }
 }
 
 export async function run() {
@@ -266,16 +288,18 @@ export async function run() {
   if (reclassified.changed > 0) {
     log('info', `scan.luma reclassified ${reclassified.total} stored event(s)`);
   }
-  const customSlugs = db.prepare("SELECT url FROM sources WHERE kind='luma' AND enabled != 0").all()
-    .map((r) => r.url);
-  const slugs = customSlugs.length > 0 ? [...new Set(customSlugs)] : [...new Set([...ENV_SLUGS, ...customSlugs])];
+  const sourceRows = db.prepare("SELECT url, enabled FROM sources WHERE kind='luma'").all();
+  const customSlugs = sourceRows.filter((row) => row.enabled !== 0).map((r) => r.url);
+  const slugs = sourceRows.length > 0 ? [...new Set(customSlugs)] : [...new Set(ENV_SLUGS)];
   if (slugs.length === 0) {
     log('info', 'scan.luma no calendars configured — add via "+ Add source" with kind=luma or set LUMA_CALENDARS');
     return { calendars: 0, total: 0, added: 0 };
   }
   log('info', `scan.luma polling ${slugs.length} calendar(s)`);
-  let total = 0, added = 0;
+  let total = 0, added = 0, failures = 0;
   for (const slug of slugs) {
+    const startedAt = Date.now();
+    let sourceSeen = 0, sourceAdded = 0;
     try {
       const resolved = await resolveSlug(slug);
       if (resolved.kind === 'event') {
@@ -285,34 +309,41 @@ export async function run() {
         const ev = j.data?.event;
         if (ev) {
           const single = insertEvent({ ev, calendarSlug: resolved.slug, host: 'Lu.ma' });
-          if (single.inserted) added++;
+          if (single.inserted) {
+            added++;
+            sourceAdded++;
+          }
           total++;
+          sourceSeen++;
         }
+        updateSourceHealth({ url: slug, ok: true, seen: sourceSeen, added: sourceAdded, durationMs: Date.now() - startedAt });
         continue;
       }
       const entries = await listCalendarEvents(resolved.apiId);
-      let creditsAdded = 0, hackish = 0;
+      let hackish = 0;
       for (const entry of entries) {
         const ev = entry.event;
         if (!ev) continue;
         const r = insertEvent({ ev, calendarSlug: resolved.slug, host: resolved.name });
-        if (r.inserted) added++;
+        if (r.inserted) {
+          added++;
+          sourceAdded++;
+        }
         if (r.isHackish) hackish++;
         total++;
-        // Enrich only hack-ish events with credit extraction (skip casual meetups)
-        if (process.env.LUMA_ENRICH !== '0' && r.isHackish) {
-          creditsAdded += await enrichEventCredits(ev);
-        }
+        sourceSeen++;
       }
-      if (creditsAdded > 0) log('ok', `scan.luma ${resolved.slug}: +${creditsAdded} credit signal(s)`);
       log('info', `scan.luma ${resolved.slug}: ${entries.length} events (${hackish} hackish)`);
+      updateSourceHealth({ url: slug, ok: true, seen: sourceSeen, added: sourceAdded, durationMs: Date.now() - startedAt });
     } catch (e) {
+      failures++;
+      updateSourceHealth({ url: slug, ok: false, error: e.message, seen: sourceSeen, added: sourceAdded, durationMs: Date.now() - startedAt });
       log('bad', `scan.luma ${slug} failed: ${e.message}`);
     }
   }
   if (added > 0) log('ok', `scan.luma ${added} new event(s) across ${slugs.length} calendar(s)`);
   else log('info', `scan.luma ${total} events seen, none new`);
-  return { calendars: slugs.length, total, added };
+  return { calendars: slugs.length, total, added, updated: 0, failures };
 }
 
 const INTERVAL_MS = Number(process.env.LUMA_INTERVAL_MS || 30 * 60_000);

@@ -2,12 +2,20 @@
  * App shell — sidebar + header + module router
  * ------------------------------------------------------------------ */
 
+const ROUTES = new Set(['contests', 'entries', 'admin']);
+
+function normalizeRoute(value) {
+  const route = String(value || '').replace(/^#\/?/, '');
+  if (route === 'credits') return 'entries';
+  if (route === 'discovery') return 'contests';
+  if (route === 'sources') return 'admin';
+  return ROUTES.has(route) ? route : 'contests';
+}
+
 function Sidebar({ route, go }) {
   const modules = [
+    { k:'contests',  l:'Contests',     kbd:'G C' },
     { k:'entries',   l:'Submissions',  kbd:'G E' },
-    { k:'overview',  l:'Overview',     kbd:'G O' },
-    { k:'credits',   l:'Credit hunter',kbd:'G C' },
-    { k:'scratch',   l:'Scratchpad',   kbd:'G S' },
     { k:'admin',     l:'Admin',        kbd:'G A' },
   ];
 
@@ -36,11 +44,11 @@ function Sidebar({ route, go }) {
       <div className="sb-section">Modules</div>
       <nav className="sb-nav">
         {modules.map(m => (
-          <div key={m.k} className="sb-item" aria-current={route===m.k} onClick={() => go(m.k)}>
+          <button key={m.k} type="button" className="sb-item" aria-current={route===m.k ? 'page' : undefined} onClick={() => go(m.k)}>
             <span className="dot" />
             <span>{m.l}</span>
             <span className="k">{m.kbd}</span>
-          </div>
+          </button>
         ))}
       </nav>
 
@@ -69,11 +77,9 @@ function NotificationsBell() {
     return () => { abort = true; };
   }, [open]);
 
-  const unseen = (window.CREDITS || []).filter(c => c.unread).length;
-
   return (
     <div style={{position:'relative'}}>
-      <button className="btn" onClick={() => setOpen(o => !o)}>notifications · {unseen}</button>
+      <button className="btn" onClick={() => setOpen(o => !o)}>activity</button>
       {open && (
         <div style={{
           position:'absolute', right:0, top:'calc(100% + 6px)', zIndex:40,
@@ -84,7 +90,7 @@ function NotificationsBell() {
           <div style={{padding:'10px 12px', borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center'}}>
             <b>Recent activity</b>
             <span style={{flex:1}} />
-            <span className="dim" style={{fontSize:10.5, cursor:'pointer'}} onClick={() => setOpen(false)}>close</span>
+            <button type="button" className="dim" style={{fontSize:10.5, cursor:'pointer', border:0, background:'transparent', padding:0}} onClick={() => setOpen(false)}>close</button>
           </div>
           <div style={{maxHeight:320, overflow:'auto'}}>
             {items.length === 0 && <div style={{padding:14, color:'var(--fg-3)'}}>no activity yet</div>}
@@ -102,16 +108,15 @@ function NotificationsBell() {
   );
 }
 
-function TopBar({ route }) {
+function TopBar({ route, go }) {
   const [search, setSearch] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
-  const [quickCaptureOpen, setQuickCaptureOpen] = useState(false);
-  const [quickCapture, setQuickCapture] = useState({ ttl:'', tag:'inbox', body:'' });
+  const [newOpen, setNewOpen] = useState(false);
+  const newMenuRef = useRef(null);
+  const newButtonRef = useRef(null);
   const crumbs = {
-    overview: ['Home','Overview'],
     entries: ['Home','Submissions'],
-    credits: ['Home','Credit hunter','Inbox'],
-    scratch: ['Home','Scratchpad'],
+    contests: ['Home','Contests'],
     admin: ['Home','Admin'],
   }[route] || ['Home'];
 
@@ -126,25 +131,52 @@ function TopBar({ route }) {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  useEffect(() => {
+    if (!newOpen) return;
+    const onPointerDown = (e) => {
+      if (!newMenuRef.current?.contains(e.target)) {
+        setNewOpen(false);
+      }
+    };
+    const onKey = (e) => {
+      if (e.key === 'Escape') {
+        setNewOpen(false);
+        newButtonRef.current?.focus();
+      }
+    };
+    window.addEventListener('pointerdown', onPointerDown);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('pointerdown', onPointerDown);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [newOpen]);
+
+  const newItems = [
+    { type:'contest', label:'New contest', route:'contests' },
+    { type:'submission', label:'New submission', route:'entries' },
+    { type:'import_url', label:'Import URL', route:'entries' },
+    { type:'source', label:'Add source', route:'admin' },
+  ];
+
+  const openNew = (item) => {
+    go(item.route);
+    setNewOpen(false);
+    newButtonRef.current?.focus();
+    setTimeout(() => {
+      window.dispatchEvent(new CustomEvent('vh:new', { detail: { type: item.type } }));
+    }, 0);
+  };
+
   const results = useMemo(() => {
     if (!search || search.length < 2) return null;
     const q = search.toLowerCase();
     const hit = (s) => String(s || '').toLowerCase().includes(q);
     return [
-      ...(window.ENTRIES || []).filter(e => hit(e.title) || hit(e.project) || hit(e.contest_name) || hit(e.hack)).slice(0,5).map(e => ({ kind:'submission', label: e.title, sub: [e.contest_name || e.hack, e.stage].filter(Boolean).join(' · ') })),
-      ...(window.HACKS || []).filter(h => !h.hidden && (hit(h.name) || hit(h.code) || hit(h.host) || hit(h.website))).slice(0,5).map(h => ({ kind:'hack', label: `${h.code} · ${h.name}`, sub: [h.host, h.website].filter(Boolean).join(' · ') })),
-      ...(window.CREDITS || []).filter(c => hit(c.subject) || hit(c.from) || hit(c.provider)).slice(0,5).map(c => ({ kind:'credit', label: c.subject, sub: `${c.provider} · ${c.value}` })),
-      ...(window.NOTES || []).filter(n => hit(n.ttl) || hit(n.body)).slice(0,5).map(n => ({ kind:'note', label: n.ttl, sub: n.tag })),
+      ...(window.ENTRIES || []).filter(e => hit(e.title) || hit(e.project) || hit(e.contest_name) || hit(e.hack)).slice(0,5).map(e => ({ kind:'submission', route:'entries', label: e.title, sub: [e.contest_name || e.hack, e.stage].filter(Boolean).join(' · ') })),
+      ...(window.HACKS || []).filter(h => !h.hidden && (hit(h.name) || hit(h.code) || hit(h.host) || hit(h.website))).slice(0,5).map(h => ({ kind:'contest', route:'contests', label: `${h.code} · ${h.name}`, sub: [h.host, h.website].filter(Boolean).join(' · ') })),
     ];
   }, [search]);
-
-  const submitQuickCapture = async (e) => {
-    e.preventDefault();
-    if (!quickCapture.ttl.trim()) return;
-    await window.__vh_mut('/api/notes', { body: { ttl: quickCapture.ttl.trim(), tag: quickCapture.tag.trim() || 'inbox', body: quickCapture.body } });
-    setQuickCapture({ ttl:'', tag:'inbox', body:'' });
-    setQuickCaptureOpen(false);
-  };
 
   return (
     <div className="hd">
@@ -156,99 +188,111 @@ function TopBar({ route }) {
           </React.Fragment>
         ))}
       </div>
-      <div className="hd-search" style={{cursor:'pointer'}} onClick={() => setSearchOpen(true)}>
+      <button type="button" className="hd-search" style={{cursor:'pointer'}} onClick={() => setSearchOpen(true)}>
         <span>⌕</span>
-        <span>search submissions, contests, credits…</span>
+        <span>search submissions and contests…</span>
         <span style={{flex:1}} />
         <span className="kbd">⌘K</span>
-      </div>
+      </button>
       <div className="hd-right">
         <NotificationsBell />
-        <button className="btn" onClick={async () => {
-          try { await navigator.clipboard?.writeText(window.location.href); } catch {}
-          window.__vh_toast?.('Link copied', 'ok');
-        }}>share</button>
-        <button className="btn btn-primary" onClick={() => setQuickCaptureOpen(true)}>+ quick capture</button>
+        <div ref={newMenuRef} style={{position:'relative'}}>
+          <button
+            ref={newButtonRef}
+            type="button"
+            className="btn btn-primary"
+            aria-haspopup="menu"
+            aria-expanded={newOpen}
+            onClick={() => setNewOpen(o => !o)}
+          >+ New</button>
+          {newOpen && (
+            <div
+              role="menu"
+              aria-label="Create new"
+              style={{
+                position:'absolute', right:0, top:'calc(100% + 6px)', zIndex:45,
+                minWidth:180, background:'var(--bg)', border:'1px solid var(--border-2)',
+                borderRadius:8, boxShadow:'0 10px 30px -10px oklch(0% 0 0 / 0.12)',
+                padding:6
+              }}
+            >
+              {newItems.map(item => (
+                <button
+                  key={item.type}
+                  type="button"
+                  role="menuitem"
+                  onClick={() => openNew(item)}
+                  style={{
+                    display:'block', width:'100%', border:0, background:'transparent', color:'var(--fg)',
+                    textAlign:'left', padding:'8px 10px', borderRadius:6, fontSize:13, cursor:'pointer'
+                  }}
+                >{item.label}</button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {searchOpen && (
-        <div onClick={() => setSearchOpen(false)} style={{
+        <div role="presentation" onClick={() => setSearchOpen(false)} style={{
           position:'fixed', inset:0, background:'oklch(20% 0 0 / 0.25)', zIndex:50,
           display:'flex', justifyContent:'center', alignItems:'flex-start', paddingTop:'12vh'
         }}>
-          <div onClick={(e)=>e.stopPropagation()} style={{
+          <div role="dialog" aria-modal="true" aria-label="Search submissions and contests" onClick={(e)=>e.stopPropagation()} style={{
             width:560, background:'var(--bg)', borderRadius:10, border:'1px solid var(--border-2)',
             boxShadow:'0 20px 60px -10px oklch(0% 0 0 / 0.25)', overflow:'hidden'
           }}>
             <div style={{padding:'12px 14px', borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center', gap:10}}>
               <span className="mono" style={{color:'var(--fg-3)'}}>⌕</span>
-               <input autoFocus value={search} onChange={(e)=>setSearch(e.target.value)} placeholder="search submissions, contests, credits, notes…"
-                      style={{flex:1, border:0, outline:'none', fontSize:14, background:'transparent', color:'var(--fg)'}} />
+                <input aria-label="Search submissions and contests" autoFocus value={search} onChange={(e)=>setSearch(e.target.value)} placeholder="search submissions and contests…"
+                       style={{flex:1, border:0, outline:'none', fontSize:14, background:'transparent', color:'var(--fg)'}} />
               <span className="kbd">esc</span>
             </div>
             <div style={{maxHeight:400, overflow:'auto'}}>
               {results === null && <div className="dim" style={{padding:14, fontSize:12}}>type at least 2 characters</div>}
               {results && results.length === 0 && <div className="dim" style={{padding:14, fontSize:12}}>no matches</div>}
               {results && results.map((r,i) => (
-                <div key={i} style={{padding:'10px 14px', borderBottom:'1px solid var(--border)', display:'grid', gridTemplateColumns:'60px 1fr', gap:12}}>
+                <button key={i} type="button" onClick={() => { go(r.route); setSearchOpen(false); setSearch(''); }} style={{padding:'10px 14px', border:0, borderBottom:'1px solid var(--border)', background:'transparent', color:'var(--fg)', width:'100%', display:'grid', gridTemplateColumns:'72px 1fr', gap:12, cursor:'pointer', textAlign:'left'}}>
                   <span className="mono" style={{fontSize:10.5, color:'var(--fg-3)', textTransform:'uppercase'}}>{r.kind}</span>
                   <div>
                     <div style={{fontWeight:500, fontSize:13}}>{r.label}</div>
                     <div className="mono" style={{fontSize:11, color:'var(--fg-3)', marginTop:2}}>{r.sub}</div>
                   </div>
-                </div>
+                </button>
               ))}
             </div>
           </div>
         </div>
       )}
 
-      <Modal
-        open={quickCaptureOpen}
-        onClose={() => setQuickCaptureOpen(false)}
-        title="Quick capture"
-        sub="Drop a note into the inbox without leaving your flow."
-        footer={(
-          <>
-            <button className="copy-btn" onClick={() => setQuickCaptureOpen(false)}>cancel</button>
-            <span style={{ flex: 1 }} />
-            <button className="rowbtn primary" onClick={submitQuickCapture}>save note</button>
-          </>
-        )}
-      >
-        <form onSubmit={submitQuickCapture} style={{ display:'grid', gap:12 }}>
-          <Field label="Title">
-            <input autoFocus value={quickCapture.ttl} onChange={(e) => setQuickCapture((prev) => ({ ...prev, ttl: e.target.value }))} placeholder="What do you want to remember?" />
-          </Field>
-          <Field label="Tag">
-            <input value={quickCapture.tag} onChange={(e) => setQuickCapture((prev) => ({ ...prev, tag: e.target.value }))} placeholder="inbox" />
-          </Field>
-          <Field label="Body">
-            <textarea value={quickCapture.body} onChange={(e) => setQuickCapture((prev) => ({ ...prev, body: e.target.value }))} placeholder="Optional notes" />
-          </Field>
-          <button type="submit" style={{ display:'none' }} />
-        </form>
-      </Modal>
     </div>
   );
 }
 
 function App() {
   const [route, setRoute] = useState(() => {
-    const saved = localStorage.getItem('vh:route') || 'entries';
-    if (saved === 'discovery' || saved === 'sources') return 'admin';
-    return saved;
+    const hashRoute = normalizeRoute(window.location.hash);
+    if (window.location.hash) return hashRoute;
+    return normalizeRoute(localStorage.getItem('vh:route') || 'contests');
   });
   const [, bump] = useState(0);
-  useEffect(() => { localStorage.setItem('vh:route', route); }, [route]);
+  useEffect(() => {
+    localStorage.setItem('vh:route', route);
+    if (window.location.hash !== `#${route}`) window.history.replaceState(null, '', `#${route}`);
+  }, [route]);
+  useEffect(() => {
+    const onHash = () => setRoute(normalizeRoute(window.location.hash));
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
   useEffect(() => {
     const h = () => bump(v => v + 1);
     window.addEventListener('vh:refresh', h);
     return () => window.removeEventListener('vh:refresh', h);
   }, []);
-  const go = (k) => setRoute(k);
+  const go = (k) => setRoute(normalizeRoute(k));
 
-  // Keyboard shortcuts — G then E/O/C/S/A
+  // Keyboard shortcuts — G then C/E/A
   useEffect(() => {
     let gPending = 0;
     const onKey = (e) => {
@@ -256,7 +300,7 @@ function App() {
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
       if (e.key === 'g' || e.key === 'G') { gPending = Date.now(); return; }
       if (gPending && Date.now() - gPending < 1200) {
-        const m = { e:'entries', o:'overview', c:'credits', s:'scratch', a:'admin', d:'admin', m:'admin' }[e.key.toLowerCase()];
+        const m = { c:'contests', e:'entries', a:'admin' }[e.key.toLowerCase()];
         if (m) { setRoute(m); e.preventDefault(); gPending = 0; }
       }
     };
@@ -268,11 +312,9 @@ function App() {
     <>
       <Sidebar route={route} go={go} />
       <main className="main" data-screen-label={'VH · ' + route}>
-        <TopBar route={route} />
+        <TopBar route={route} go={go} />
+        {route === 'contests'  && <Contests />}
         {route === 'entries'   && <Entries />}
-        {route === 'overview'  && <Overview go={go} />}
-        {route === 'credits'   && <Credits />}
-        {route === 'scratch'   && <Scratchpad />}
         {route === 'admin'     && <AdminPanel />}
       </main>
     </>
