@@ -313,8 +313,9 @@ app.use('/*', serveStatic({ root: './' }));
 app.get('/', serveStatic({ path: './index.html' }));
 
 const port = Number(process.env.PORT || 9080);
-serve({ fetch: app.fetch, port, hostname: '127.0.0.1' }, (info) => {
-  console.log(`vibehack listening on http://127.0.0.1:${info.port}`);
+const hostname = process.env.HOST || '127.0.0.1';
+serve({ fetch: app.fetch, port, hostname }, (info) => {
+  console.log(`vibehack listening on http://${hostname}:${info.port}`);
   log('ok', `server started on :${info.port}`);
   if (process.env.VH_WORKERS !== 'off') startAll();
 });
